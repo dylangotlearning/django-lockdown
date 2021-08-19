@@ -6,6 +6,7 @@ from importlib import import_module
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponseRedirect
+from django.http.response import HttpResponse
 from django.shortcuts import render
 from django.urls import Resolver404, resolve
 
@@ -72,6 +73,11 @@ class LockdownMiddleware(object):
 
     def __call__(self, request):
         """Handle calls to the class instance."""
+        
+        # No robots on locked-down site
+        if request.path == '/robots.txt':
+            return HttpResponse("user-agent: *\nDisallow: /", content_type="text/plain")
+
         response = self.process_request(request)
 
         if not response:
@@ -92,6 +98,12 @@ class LockdownMiddleware(object):
         # Don't lock down if django-lockdown is disabled altogether.
         if getattr(settings, 'LOCKDOWN_ENABLED', True) is False:
             return None
+
+        # Don't lock down if using an authentication header. 
+        token_key = getattr(settings, 'STAGING_TOKEN_KEY', None) 
+        if token_key is not None and request.META.get(token_key, None) is not None:
+            if request.META[token_key] == getattr(settings, 'STAGING_TOKEN'):
+                return None
 
         # Don't lock down if the client REMOTE_ADDR matched and is part of the
         # exception list.
